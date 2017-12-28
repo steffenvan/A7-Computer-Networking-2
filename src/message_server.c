@@ -2,6 +2,8 @@
 #include "command.h"
 
 pthread_t tid;
+static pthread_key_t key;
+static pthread_once_t once_key = PTRHEAD_ONCE_INIT;
 
 struct clean_up_info {
 
@@ -99,16 +101,19 @@ void cleanThread(struct peer_info *peer, struct command_stream_info *peer_info) 
   Pthread_exit(NULL);
 }
 
+void makeKey () {
+  pthread_key_create(&key, cleanThread);
+}
+
 void *messageReceiverThread (void *vargp) {
 
   struct peer_info *sender = ((struct peer_info*)vargp);
   struct command_stream_info *sender_info = makeCommandStream(sender -> socket_fd);
-
   struct clean_up_info *clean_info = malloc(sizeof(*clean_info));
   clean_info -> peer = sender;
   clean_info -> peer_in = sender_info;
 
-  pthread_cleanup_push(cleanThread, clean_info);
+  pthread_once(&once_key, makeKey);
 
   getCommand(sender_info);
   char *command;

@@ -123,22 +123,17 @@ void *messageReceiverThread (void *vargp) {
 
   if (commandGetString(&command, sender_info) != 0) {
     printf("Recieved malformed input, closing connection\n");
-    pthread_cleanup_pop(1);
     return NULL;
   }
-  pthread_cleanup_pop(1);
 
-/*
   if (strcmp(command, "connect") != 0) {
     printf("Recieved malformed command (%s), closing connection\n", command);
-    pthread_cleanup_pop(1);
     return NULL;
   }
 
   char *username = NULL;
   if (commandGetString (&username, sender_info) != 0) {
     printf("Recieved malformed username, closing connection\n");
-    pthread_cleanup_pop(1);
     return NULL;
   }
   // Using strdup because getcommand deallocates all objects
@@ -152,8 +147,6 @@ void *messageReceiverThread (void *vargp) {
     }
     if (strcmp(command, "say") != 0) {
       printf("Received malformed command (%s)\n", command);
-      cleanThread(client_info, sender_info);
-
     }
     char *message;
     if (commandGetString(&message, sender_info) != 0) {
@@ -162,5 +155,5 @@ void *messageReceiverThread (void *vargp) {
     // Using strdup because getcommand deallocates all objects
     message = strdup(message);
     storeMessage(sender_info, message);
-  }*/
+  }
 }

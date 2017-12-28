@@ -171,6 +171,20 @@ int findUser(char *username) {
   return 0;
 }
 
+
+
+struct peer_node *getUser(char *username) {
+  struct peer_node *user = lookupUser(username);
+  if (user == NULL) {
+    user = connectToUser(username);
+  }
+  return user;
+}
+
+struct peer_node *connectToUser(char *username) {
+  return NULL;
+}
+
 // int startMessageServer()
 
 int main(int argc, char**argv) {
@@ -235,7 +249,9 @@ int main(int argc, char**argv) {
         char *username;
         if (commandGetString(&username, in) != 0) {
           printf("Msg syntax: /msg <username> <message>\n");
+          continue;
         }
+
       }
 
 

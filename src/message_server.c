@@ -30,17 +30,31 @@ struct message {
 struct message messages[1024];
 int messageCount = 0;
 
-// struct user_node *addUser(char *username) {
-//   if (findUser(username) == NULL) {
-//     return NULL;
-//   }
-//   struct peer_node *user = malloc(sizeof(*user));
-//   user -> username   = username;
-// }
+struct user_node *addUser(char *username, struct peer_info *peer_in) {
+  if (lookupUser(username) != NULL) {
+    return NULL;
+  }
+  struct peer_node *user = malloc(sizeof(*user));
+  user -> username = username;
+  user -> peer = peer_in;
+  user -> next = users;
+  user -> prev = NULL;
+  if(users != NULL) {
+    users -> prev = user;
+  }
+  users = user;
+  return user;
+}
 
 struct peer_node *users = NULL;
+
 struct peer_node *lookupUser(char *username) {
-  for (struct peer_node *user == users; user != NULL;  )
+  for (struct peer_node *user == users; user != NULL; user = user -> next) {
+    if (strcmp(user -> username, username) == 0) {
+      return user;
+    }
+  }
+  return NULL;
 }
 
 int showMessageFrom(peer_node *user) {

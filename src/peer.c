@@ -47,6 +47,11 @@ int connectClient(char *username, char *password, char *ip, char *port) {
   return 0;
 }
 
+
+// print
+// int print_message()
+
+
 int findAllUsers() {
   if (!loggedIn) {
     printf("Not logged in. Use /login to log in.\n");
@@ -166,6 +171,8 @@ int findUser(char *username) {
   return 0;
 }
 
+// int startMessageServer()
+
 int main(int argc, char**argv) {
   if (argc != ARGNUM + 1) {
     printf("%s expects %d arguments.\n", (argv[0]+2), ARGNUM);
@@ -223,6 +230,15 @@ int main(int argc, char**argv) {
         }
         findUser(username);
       }
+
+      else if (strcmp(command, "msg") == 0) {
+        char *username;
+        if (commandGetString(&username, in) != 0) {
+          printf("Msg syntax: /msg <username> <message>\n");
+        }
+      }
+
+
       else if (strcmp(command, "logout") == 0) {
         if (commandHasNext(in)) {
           printf("Logout syntax: /logout\n");

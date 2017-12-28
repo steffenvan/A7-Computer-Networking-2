@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS =-Wall -Wextra -pedantic -std=gnu11
 LD_FLAGS = -lpthread
 
-all : command peer name_server
+all : command peer name_server 
 
 rebuild : clean all
 

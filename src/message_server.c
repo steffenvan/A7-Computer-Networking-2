@@ -1,5 +1,5 @@
-#include "peer.h"
 #include "command.h"
+#include "message_server.h"
 
 pthread_t tid;
 
@@ -14,7 +14,7 @@ struct peer_node {
   struct peer_info *peer;
   struct peer_node *next;
   struct peer_node *prev;
-}
+};
 
 struct peer_info {
   int socket_fd;
@@ -22,15 +22,8 @@ struct peer_info {
   socklen_t addr_len;
 };
 
-struct message {
-  char *message;
-  struct peer_node *sender;
-};
-
-struct message messages[1024];
-int messageCount = 0;
-
-struct user_node *addUser(char *username, struct peer_info *peer_in) {
+struct peer_node *users = NULL;
+struct peer_node *addUser(char *username, struct peer_info *peer_in) {
   if (lookupUser(username) != NULL) {
     return NULL;
   }
@@ -46,10 +39,9 @@ struct user_node *addUser(char *username, struct peer_info *peer_in) {
   return user;
 }
 
-struct peer_node *users = NULL;
 
 struct peer_node *lookupUser(char *username) {
-  for (struct peer_node *user == users; user != NULL; user = user -> next) {
+  for (struct peer_node *user = users; user != NULL; user = user -> next) {
     if (strcmp(user -> username, username) == 0) {
       return user;
     }
@@ -57,33 +49,44 @@ struct peer_node *lookupUser(char *username) {
   return NULL;
 }
 
-int showMessageFrom(peer_node *user) {
+struct message {
+  char *message;
+  struct peer_node *sender;
+};
+
+struct message messages[1024];
+int messageCount = 0;
+int showMessageFrom(struct peer_node *user) {
   for (int i = 0, j = 0; i < messageCount; i++) {
     if (messages[i].sender == user) {
-      outPutMessage();
+      //outPutMessage();
     }
   }
 }
 
-int storeMessage(peer_node *user, char *message) {
+int storeMessage(struct peer_node *user, char *message) {
   messages[messageCount].message = message;
   messages[messageCount].sender = user;
   messageCount++;
 }
+
+void *thread (void *vargp);
+void *messageReceiverThread (void *vargp);
 
 int openServer(char *port) {
   Pthread_create(&tid, NULL, thread, port);
 }
 
 void *thread (void *vargp) {
-  server_fd = Open_listenfd(port);
+  char *port = (char*) vargp;
+  int server_fd = Open_listenfd(port);
 
   Pthread_detach(pthread_self());
 
   while(1) {
     struct peer_info *peer = malloc(sizeof(*peer));
-    peer -> addr_len = sizeof(peer -> addr);
-    peer -> socket_fd = Accept(server_fd, &(peer -> addr), &(peer -> addr_len));
+    peer -> addr_len = sizeof(peer -> sock_addr);
+    peer -> socket_fd = Accept(server_fd, &(peer -> sock_addr), &(peer -> addr_len));
     printf("Received a connection, start typing\n");
     Pthread_create(&tid, NULL, messageReceiverThread, &(peer -> socket_fd));
 
@@ -118,7 +121,9 @@ void *messageReceiverThread (void *vargp) {
     pthread_cleanup_pop(1);
     return NULL;
   }
+  pthread_cleanup_pop(1);
 
+/*
   if (strcmp(command, "connect") != 0) {
     printf("Recieved malformed command (%s), closing connection\n", command);
     pthread_cleanup_pop(1);
@@ -152,5 +157,5 @@ void *messageReceiverThread (void *vargp) {
     // Using strdup because getcommand deallocates all objects
     message = strdup(message);
     storeMessage(sender_info, message);
-  }
+  }*/
 }

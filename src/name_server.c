@@ -20,6 +20,8 @@ struct client_info {
 
 struct user_node {
   char *username;
+  char *address;
+  int port;
   struct client_info *client;
   struct user_node *next;
   struct user_node *previous;
@@ -40,13 +42,15 @@ bool rio_writei(int fd, int val) {
   return !ok;
 }
 
-struct user_node *createUser(char *username, struct client_info *client) {
+struct user_node *createUser(char *username, struct client_info *client, char *address, int port) {
   if (findUser(username) != NULL) {
     return NULL;
   }
   struct user_node *result = malloc(sizeof(*result));
   result -> username = username;
   result -> client = client;
+  result -> address = address;
+  result -> port = port;
   result -> next = users;
   result -> previous = NULL;
   if (users != NULL) {
@@ -112,17 +116,13 @@ bool sendUser(int fd, struct user_node *user) {
 
   bool writefailed = false;
 
-  struct sockaddr_in *addr = (struct sockaddr_in*) &(user -> client -> addr);
-  char *address_string = inet_ntoa(addr -> sin_addr);
-
-  printf("sockaddress is: %s\n", address_string);
   char *buffer = "user ";
   writefailed |= rio_writen(fd, buffer, strlen(buffer)) < 0;
   writefailed |= rio_writen(fd, user -> username, strlen(user -> username)) < 0;
   writefailed |= rio_writen(fd, " ", 1) < 0;
-  writefailed |= rio_writen(fd, address_string, strlen(address_string)) < 0;
+  writefailed |= rio_writen(fd, user -> address, strlen(user -> address)) < 0;
   writefailed |= rio_writen(fd, " ", 1) < 0;
-  writefailed |= rio_writei(fd, addr -> sin_port);
+  writefailed |= rio_writei(fd, user -> port);
   writefailed |= rio_writen(fd, "\n", 1) < 0;
   printf("%s\n", user -> username);
   Fputs(writefailed ? "true\n" : "false\n", stdout);
@@ -151,13 +151,19 @@ void *thread(void *vargp) {
       cleanThread(client, in);
     }
     char *username = NULL;
-    if (commandGetString (&username, in) != 0) {
-      printf("Recieved malformed username, closing connection\n");
+    char *address = NULL;
+    int port;
+    if (commandGetString (&username, in) != 0 ||
+        commandGetString (&address, in) != 0 ||
+        commandGetInt (&port, in) != 0 ||
+        commandHasNext(in)) {
+      printf("Recieved malformed login, closing connection\n");
       cleanThread(client, in);
     }
     //string dup, because getcommand deallocates all objects;
     username = strdup(username);
-    struct user_node *user = createUser(username, client);
+    address = strdup(address);
+    struct user_node *user = createUser(username, client, address, port);
     if (user == NULL) {
       printf("User %s already created, exiting...\n", username);
       Free(username);

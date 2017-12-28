@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "peer.h"
 #include "command.h"
+#include "message_server.h"
 #define PORT 8080
 
 #define ARGNUM 0 // TODO: Put the number of you want to take
@@ -8,6 +9,8 @@
 int clientfd;
 struct command_stream_info *client_in;
 bool loggedIn = false;
+
+struct peer_node *connectToUser(char *username);
 
 int logoutUser() {
   if (!loggedIn) {

@@ -145,12 +145,9 @@ void *thread(void *vargp) {
     char *command;
     getCommand(in);
 
-    if (commandGetString (&command, in) != 0) {
+    if (commandGetString (&command, in) != 0 ||
+        strcmp(command, "login") != 0) {
       printf("Recieved malformed input, closing connection\n");
-      cleanThread(client, in);
-    }
-    if (strcmp(command, "login") != 0) {
-      printf("Recieved malformed command (%s), closing connection\n", command);
       cleanThread(client, in);
     }
     char *username = NULL;

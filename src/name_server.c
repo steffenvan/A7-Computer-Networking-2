@@ -152,7 +152,7 @@ void *thread(void *vargp) {
     }
     char *username = NULL;
     char *address = NULL;
-    int port;
+    int port = 0;
     if (commandGetString (&username, in) != 0 ||
         commandGetString (&address, in) != 0 ||
         commandGetInt (&port, in) != 0 ||

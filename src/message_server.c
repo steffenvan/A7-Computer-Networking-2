@@ -1,9 +1,10 @@
 #include "command.h"
 #include "message_server.h"
+#include <pthread.h>
 
 pthread_t tid;
 static pthread_key_t key;
-static pthread_once_t once_key = PTRHEAD_ONCE_INIT;
+static pthread_once_t once_key = PTHREAD_ONCE_INIT;
 
 struct clean_up_info {
 
@@ -24,28 +25,28 @@ struct peer_info {
   socklen_t addr_len;
 };
 
-struct peer_node *users = NULL;
-struct peer_node *addUser(char *username, struct peer_info *peer_in) {
+struct peer_node *senders = NULL;
+struct peer_node *addSender(char *username, struct peer_info *peer_in) {
   if (lookupUser(username) != NULL) {
     return NULL;
   }
-  struct peer_node *user = malloc(sizeof(*user));
-  user -> username = username;
-  user -> peer = peer_in;
-  user -> next = users;
-  user -> prev = NULL;
-  if(users != NULL) {
-    users -> prev = user;
+  struct peer_node *sender = malloc(sizeof(*sender));
+  sender -> username = username;
+  sender -> peer = peer_in;
+  sender -> next = senders;
+  sender -> prev = NULL;
+  if(senders != NULL) {
+    senders -> prev = sender;
   }
-  users = user;
-  return user;
+  senders = sender;
+  return sender;
 }
 
 
 struct peer_node *lookupUser(char *username) {
-  for (struct peer_node *user = users; user != NULL; user = user -> next) {
-    if (strcmp(user -> username, username) == 0) {
-      return user;
+  for (struct peer_node *sender = senders; sender != NULL; sender = sender -> next) {
+    if (strcmp(sender -> username, username) == 0) {
+      return sender;
     }
   }
   return NULL;
@@ -58,28 +59,29 @@ struct message {
 
 struct message messages[1024];
 int messageCount = 0;
-int showMessageFrom(struct peer_node *user) {
-  for (int i = 0, j = 0; i < messageCount; i++) {
-    if (messages[i].sender == user) {
+int showMessageFrom(struct peer_node *sender) {
+  int j = 0;
+  for (int i = 0; i < messageCount; i++) {
+    if (messages[i].sender == sender) {
       //outPutMessage();
     }
   }
 }
 
-int storeMessage(struct peer_node *user, char *message) {
+int storeMessage(struct peer_node *sender, char *message) {
   messages[messageCount].message = message;
-  messages[messageCount].sender = user;
+  messages[messageCount].sender = sender;
   messageCount++;
 }
 
-void *thread (void *vargp);
+void *receiverThread (void *vargp);
 void *messageReceiverThread (void *vargp);
 
 int openServer(char *port) {
-  Pthread_create(&tid, NULL, thread, port);
+  Pthread_create(&tid, NULL, receiverThread, port);
 }
 
-void *thread (void *vargp) {
+void *receiverThread (void *vargp) {
   char *port = (char*) vargp;
   int server_fd = Open_listenfd(port);
 
@@ -95,17 +97,17 @@ void *thread (void *vargp) {
   }
 }
 
-void cleanThread(struct peer_info *peer, struct command_stream_info *peer_info) {
+void cleanReceiverThread(void *ptr) {
 
-  Close(peer -> socket_fd);
-  destroyCommandStream(peer_info);
-  Free(peer);
-
+  struct clean_up_info *clean_in = (struct clean_up_info*)ptr;
+  Close(clean_in -> peer -> socket_fd);
+  destroyCommandStream(clean_in -> peer_in);
+  Free(clean_in -> peer);
   Pthread_exit(NULL);
 }
 
 void makeKey () {
-  pthread_key_create(&key, cleanThread);
+  pthread_key_create(&key, cleanReceiverThread);
 }
 
 void *messageReceiverThread (void *vargp) {
@@ -117,6 +119,7 @@ void *messageReceiverThread (void *vargp) {
   clean_info -> peer_in = sender_info;
 
   pthread_once(&once_key, makeKey);
+  pthread_setspecific(key, clean_info);
 
   getCommand(sender_info);
   char *command;
@@ -138,6 +141,13 @@ void *messageReceiverThread (void *vargp) {
   }
   // Using strdup because getcommand deallocates all objects
   username = strdup(username);
+  struct peer_node *sender_node = addSender(username, sender);
+  if (sender_node == NULL) {
+    printf("Received malformed user\n");
+    Free(username);
+    return NULL;
+  }
+
   while (1) {
     if (getCommand(sender_info) != 0) {
       break;
@@ -154,6 +164,6 @@ void *messageReceiverThread (void *vargp) {
     }
     // Using strdup because getcommand deallocates all objects
     message = strdup(message);
-    storeMessage(sender_info, message);
+    storeMessage(sender_node, message);
   }
 }

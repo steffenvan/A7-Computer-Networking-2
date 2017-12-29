@@ -9,8 +9,17 @@
 int clientfd;
 struct command_stream_info *client_in;
 bool loggedIn = false;
+char *loginName;
 
 struct peer_node *connectToUser(char *username);
+
+struct user_record {
+  char *username;
+  char *address;
+  char *port;
+};
+
+const struct user_record NULL_USER = {NULL, NULL, NULL};
 
 int logoutUser() {
   if (!loggedIn) {
@@ -24,6 +33,7 @@ int logoutUser() {
   close(clientfd);
   destroyCommandStream(client_in);
   printf("You are now logged out.\n");
+  Free(loginName);
   loggedIn = false;
   return 0;
 }
@@ -34,6 +44,7 @@ int connectClient(char *username, char *password, char *ip, char *port) {
     return -1;
   }
   clientfd = Open_clientfd("localhost", "8080");
+  loginName = strdup(username);
   client_in = makeCommandStream(clientfd);
   char *buffer = "login ";
   Rio_writen(clientfd, buffer, strlen(buffer));
@@ -47,6 +58,7 @@ int connectClient(char *username, char *password, char *ip, char *port) {
   Rio_writen(clientfd, "\n", 1);
   printf("Welcome %s\n", username);
   loggedIn = true;
+  openServer(port);
   return 0;
 }
 
@@ -127,10 +139,11 @@ int findAllUsers() {
   return 0;
 }
 
-int findUser(char *username) {
+struct user_record findUser(char *username) {
+
   if (!loggedIn) {
     printf("Not logged in. Use /login to log in.\n");
-    return -1;
+    return NULL_USER;
   }
   char *buffer = "find ";
   if (rio_writen(clientfd, buffer, strlen(buffer)) < 0 ||
@@ -139,42 +152,47 @@ int findUser(char *username) {
       getCommand(client_in) != 0) {
     printf("Lost connection to server.\n");
     logoutUser();
-    return -1;
+    return NULL_USER;
   }
   char *command;
   if (commandGetString(&command, client_in) != 0) {
     printf("Server communication error.\n");
     logoutUser();
-    return -1;
+    return NULL_USER;
   }
   if (strcmp(command, "user") == 0) {
-    char *name;
-    char *address;
-    char *port;
-    if(commandGetString(&name, client_in) != 0 ||
-       commandGetString(&address, client_in) != 0 ||
-       commandGetString(&port, client_in) != 0 ||
+    struct user_record user;
+    if(commandGetString(&(user.username), client_in) != 0 ||
+       commandGetString(&(user.address), client_in) != 0 ||
+       commandGetString(&(user.port), client_in) != 0 ||
        commandHasNext(client_in)) {
       printf("Server communication error.\n");
       logoutUser();
-      return -1;
+      return NULL_USER;
     }
-    printf("%s is online.\n", name);
-    printf("IP: %s\n", address);
-    printf("Port: %s\n", port);
+    return user;
   }
   else if (strcmp(command, "no_user_found") == 0) {
     printf("%s is not a valid user.\n", username);
+    return NULL_USER;
   }
   else {
     printf("Server communication error.\n");
     logoutUser();
-    return -1;
+    return NULL_USER;
   }
-  return 0;
 }
 
-
+int writeUser(char *username) {
+  struct user_record user = findUser(username);
+  if (user.username == NULL) {
+    return -1;
+  }
+  printf("%s is online.\n", user.username);
+  printf("IP: %s\n", user.address);
+  printf("Port: %s\n", user.port);
+  return 0;
+}
 
 struct peer_node *getUser(char *username) {
   struct peer_node *user = lookupUser(username);
@@ -185,10 +203,27 @@ struct peer_node *getUser(char *username) {
 }
 
 struct peer_node *connectToUser(char *username) {
-  return NULL;
-}
+  struct user_record user = findUser(username);
+  printf("Address: %s, port: %s\n", user.address, user.port);
+  int userfd = Open_clientfd(user.address, user.port);
 
-// int startMessageServer()
+  char *buffer = "connect ";
+  Rio_writen(userfd, buffer, strlen(buffer));
+  Rio_writen(userfd, loginName, strlen(loginName));
+  Rio_writen(userfd, "\n", 1);
+
+  struct peer_info *sender = malloc(sizeof(*sender));
+  sender -> socket_fd = userfd;
+  struct peer_node *peer = addSender(loginName, sender);
+
+  if (peer == NULL) {
+    // Peer should not be NULL, because getUser will only return NULL, if a
+    // connection is already established.
+    printf("Connection to peer failed\n");
+  }
+
+  return peer;
+}
 
 int main(int argc, char**argv) {
   if (argc != ARGNUM + 1) {
@@ -245,16 +280,35 @@ int main(int argc, char**argv) {
           printf("Lookup syntax: /lookup <username>, or /lookup\n");
           continue;
         }
-        findUser(username);
+        writeUser(username);
       }
 
       else if (strcmp(command, "msg") == 0) {
         char *username;
-        if (commandGetString(&username, in) != 0) {
+        char *message;
+
+        if (commandGetString(&username, in) != 0 ||
+            commandGetString(&message, in) != 0) {
           printf("Msg syntax: /msg <username> <message>\n");
           continue;
         }
-
+        struct peer_node *userReceiver = getUser(username);
+        if (userReceiver == NULL) {
+          printf("Received malformed user\n");
+        }
+        messageUser(userReceiver, message);
+      }
+      else if (strcmp(command, "show") == 0) {
+        char *username;
+        if (commandGetString(&username, in) != 0) {
+          printf("Show syntax: /show <username>\n");
+          continue;
+        }
+        struct peer_node *sender = getUser(username);
+        if (sender == NULL) {
+          printf("Received malformed user\n");
+        }
+        flushMessageFrom(sender, true);
       }
 
 

@@ -7,7 +7,7 @@ static pthread_key_t key;
 static pthread_once_t once_key = PTHREAD_ONCE_INIT;
 
 struct clean_up_info {
-
+  struct peer_node *user;
   struct peer_info *peer;
   struct command_stream_info *peer_in;
 };
@@ -19,11 +19,12 @@ struct peer_node {
   struct peer_node *prev;
 };
 
-struct peer_info {
-  int socket_fd;
-  struct sockaddr sock_addr;
-  socklen_t addr_len;
+struct thread_data {
+  struct peer_info *p_info;
+  struct peer_node *p_node;
 };
+
+struct peer_info;
 
 struct peer_node *senders = NULL;
 struct peer_node *addSender(char *username, struct peer_info *peer_in) {
@@ -42,9 +43,9 @@ struct peer_node *addSender(char *username, struct peer_info *peer_in) {
   return sender;
 }
 
-
 struct peer_node *lookupUser(char *username) {
   for (struct peer_node *sender = senders; sender != NULL; sender = sender -> next) {
+    printf("considering %s\n", sender -> username);
     if (strcmp(sender -> username, username) == 0) {
       return sender;
     }
@@ -59,19 +60,57 @@ struct message {
 
 struct message messages[1024];
 int messageCount = 0;
-int showMessageFrom(struct peer_node *sender) {
+
+int flushMessageFrom(struct peer_node *sender, bool show) {
   int j = 0;
   for (int i = 0; i < messageCount; i++) {
     if (messages[i].sender == sender) {
-      //outPutMessage();
+      if (show) {
+        printf("%s\n", messages[i].message);
+      }
+      Free(messages[i].message);
+    }
+    else {
+      messages[j] = messages[i];
+      j++;
     }
   }
+  return 0;
 }
 
 int storeMessage(struct peer_node *sender, char *message) {
   messages[messageCount].message = message;
   messages[messageCount].sender = sender;
   messageCount++;
+  return 0;
+}
+
+int messageUser(struct peer_node *receiver, char *message) {
+
+  char *buffer = "say ";
+  rio_writen(receiver -> peer -> socket_fd, buffer, strlen(buffer));
+  rio_writen(receiver -> peer -> socket_fd, message, strlen(message));
+  rio_writen(receiver -> peer -> socket_fd, "\n", 1);
+  return 0;
+}
+
+void deleteSender(struct peer_node *sender) {
+
+  flushMessageFrom(sender, false);
+
+  if (sender == senders) {
+    senders -> next = sender;
+  }
+
+  if (sender -> prev != NULL) {
+    sender -> prev -> next = sender -> next;
+  }
+
+  if (sender -> next != NULL) {
+    sender -> next -> prev = sender -> prev;
+  }
+  Free(sender -> username);
+  Free(sender);
 }
 
 void *receiverThread (void *vargp);
@@ -79,6 +118,7 @@ void *messageReceiverThread (void *vargp);
 
 int openServer(char *port) {
   Pthread_create(&tid, NULL, receiverThread, port);
+  return 0;
 }
 
 void *receiverThread (void *vargp) {
@@ -88,18 +128,23 @@ void *receiverThread (void *vargp) {
   Pthread_detach(pthread_self());
 
   while(1) {
+    struct thread_data *thread = malloc(sizeof(thread));
     struct peer_info *peer = malloc(sizeof(*peer));
+    thread -> p_info = peer;
+    thread -> p_node = NULL;
     peer -> addr_len = sizeof(peer -> sock_addr);
     peer -> socket_fd = Accept(server_fd, &(peer -> sock_addr), &(peer -> addr_len));
     printf("Received a connection, start typing\n");
-    Pthread_create(&tid, NULL, messageReceiverThread, &(peer -> socket_fd));
-
+    Pthread_create(&tid, NULL, messageReceiverThread, thread);
   }
 }
 
 void cleanReceiverThread(void *ptr) {
 
   struct clean_up_info *clean_in = (struct clean_up_info*)ptr;
+  if (clean_in -> user != NULL) {
+    deleteSender(clean_in -> user);
+  }
   Close(clean_in -> peer -> socket_fd);
   destroyCommandStream(clean_in -> peer_in);
   Free(clean_in -> peer);
@@ -112,40 +157,46 @@ void makeKey () {
 
 void *messageReceiverThread (void *vargp) {
 
-  struct peer_info *sender = ((struct peer_info*)vargp);
+  struct thread_data *init = (struct thread_data*)vargp;
+  struct peer_info *sender = init -> p_info;
+  struct peer_node *user = init -> p_node;
+  Free(init);
   struct command_stream_info *sender_info = makeCommandStream(sender -> socket_fd);
   struct clean_up_info *clean_info = malloc(sizeof(*clean_info));
   clean_info -> peer = sender;
   clean_info -> peer_in = sender_info;
+  clean_info -> user = user;
 
   pthread_once(&once_key, makeKey);
   pthread_setspecific(key, clean_info);
-
-  getCommand(sender_info);
   char *command;
+  if (user == NULL) {
+    getCommand(sender_info);
 
-  if (commandGetString(&command, sender_info) != 0) {
-    printf("Recieved malformed input, closing connection\n");
-    return NULL;
-  }
+    if (commandGetString(&command, sender_info) != 0) {
+      printf("Recieved malformed input, closing connection\n");
+      return NULL;
+    }
 
-  if (strcmp(command, "connect") != 0) {
-    printf("Recieved malformed command (%s), closing connection\n", command);
-    return NULL;
-  }
+    if (strcmp(command, "connect") != 0) {
+      printf("Recieved malformed command (%s), closing connection\n", command);
+      return NULL;
+    }
 
-  char *username = NULL;
-  if (commandGetString (&username, sender_info) != 0) {
-    printf("Recieved malformed username, closing connection\n");
-    return NULL;
-  }
-  // Using strdup because getcommand deallocates all objects
-  username = strdup(username);
-  struct peer_node *sender_node = addSender(username, sender);
-  if (sender_node == NULL) {
-    printf("Received malformed user\n");
-    Free(username);
-    return NULL;
+    char *username = NULL;
+    if (commandGetString (&username, sender_info) != 0) {
+      printf("Recieved malformed username, closing connection\n");
+      return NULL;
+    }
+    // Using strdup because getcommand deallocates all objects
+    username = strdup(username);
+    user = addSender(username, sender);
+    clean_info -> user = user;
+    if (user == NULL) {
+      printf("Received malformed user\n");
+      Free(username);
+      return NULL;
+    }
   }
 
   while (1) {
@@ -164,6 +215,7 @@ void *messageReceiverThread (void *vargp) {
     }
     // Using strdup because getcommand deallocates all objects
     message = strdup(message);
-    storeMessage(sender_node, message);
+    storeMessage(user, message);
   }
+  return NULL;
 }

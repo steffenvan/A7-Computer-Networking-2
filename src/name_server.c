@@ -21,7 +21,7 @@ struct client_info {
 struct user_node {
   char *username;
   char *address;
-  int port;
+  char *port;
   struct client_info *client;
   struct user_node *next;
   struct user_node *previous;
@@ -42,7 +42,7 @@ bool rio_writei(int fd, int val) {
   return !ok;
 }
 
-struct user_node *createUser(char *username, struct client_info *client, char *address, int port) {
+struct user_node *createUser(char *username, struct client_info *client, char *address, char *port) {
   if (findUser(username) != NULL) {
     return NULL;
   }
@@ -66,6 +66,7 @@ struct user_node *findUser(char *username) {
   printf("username is: %s\n", username);
   for (struct user_node *user = users; user != NULL; user = user -> next) {
     if (strcmp((user -> username), username) == 0) {
+      printf("A\n");
       return user;
     }
   }
@@ -122,7 +123,7 @@ bool sendUser(int fd, struct user_node *user) {
   writefailed |= rio_writen(fd, " ", 1) < 0;
   writefailed |= rio_writen(fd, user -> address, strlen(user -> address)) < 0;
   writefailed |= rio_writen(fd, " ", 1) < 0;
-  writefailed |= rio_writei(fd, user -> port);
+  writefailed |= rio_writen(fd, user -> port, strlen(user -> port)) < 0;
   writefailed |= rio_writen(fd, "\n", 1) < 0;
   printf("%s\n", user -> username);
   Fputs(writefailed ? "true\n" : "false\n", stdout);
@@ -151,18 +152,22 @@ void *thread(void *vargp) {
       cleanThread(client, in);
     }
     char *username = NULL;
+    char *password = NULL;
     char *address = NULL;
-    int port = 0;
+    char *port = NULL;
     if (commandGetString (&username, in) != 0 ||
+        commandGetString (&password, in) != 0 ||
         commandGetString (&address, in) != 0 ||
-        commandGetInt (&port, in) != 0 ||
+        commandGetString (&port, in) != 0 ||
         commandHasNext(in)) {
       printf("Recieved malformed login, closing connection\n");
       cleanThread(client, in);
     }
     //string dup, because getcommand deallocates all objects;
     username = strdup(username);
+    password = strdup(password);
     address = strdup(address);
+    port = strdup(port);
     struct user_node *user = createUser(username, client, address, port);
     if (user == NULL) {
       printf("User %s already created, exiting...\n", username);
@@ -208,6 +213,7 @@ void *thread(void *vargp) {
         break;
       }
       if (writefailed) {
+        printf("writing failed\n");
         break;
       }
     }

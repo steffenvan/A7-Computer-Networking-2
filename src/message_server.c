@@ -45,7 +45,6 @@ struct peer_node *addSender(char *username, struct peer_info *peer_in) {
 
 struct peer_node *lookupUser(char *username) {
   for (struct peer_node *sender = senders; sender != NULL; sender = sender -> next) {
-    printf("considering %s\n", sender -> username);
     if (strcmp(sender -> username, username) == 0) {
       return sender;
     }
@@ -64,9 +63,9 @@ int messageCount = 0;
 int flushMessageFrom(struct peer_node *sender, bool show) {
   int j = 0;
   for (int i = 0; i < messageCount; i++) {
-    if (messages[i].sender == sender) {
+    if (sender == NULL || messages[i].sender == sender) {
       if (show) {
-        printf("%s\n", messages[i].message);
+        printf("%s: %s\n", messages[i].sender->username, messages[i].message);
       }
       Free(messages[i].message);
     }
@@ -75,8 +74,9 @@ int flushMessageFrom(struct peer_node *sender, bool show) {
       j++;
     }
   }
+  messageCount = j;
   return 0;
-}
+} 
 
 int storeMessage(struct peer_node *sender, char *message) {
   messages[messageCount].message = message;

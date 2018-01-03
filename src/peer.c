@@ -204,7 +204,6 @@ struct peer_node *getUser(char *username) {
 
 struct peer_node *connectToUser(char *username) {
   struct user_record user = findUser(username);
-  printf("Address: %s, port: %s\n", user.address, user.port);
   int userfd = Open_clientfd(user.address, user.port);
 
   char *buffer = "connect ";
@@ -214,7 +213,7 @@ struct peer_node *connectToUser(char *username) {
 
   struct peer_info *sender = malloc(sizeof(*sender));
   sender -> socket_fd = userfd;
-  struct peer_node *peer = addSender(loginName, sender);
+  struct peer_node *peer = addSender(username, sender);
 
   if (peer == NULL) {
     // Peer should not be NULL, because getUser will only return NULL, if a
@@ -254,7 +253,6 @@ int main(int argc, char**argv) {
         printf("Missing command name\n");
         continue;
       }
-
       if (strcmp(command, "login") == 0)  {
         char *username = NULL;
         char *password = NULL;
@@ -282,13 +280,12 @@ int main(int argc, char**argv) {
         }
         writeUser(username);
       }
-
       else if (strcmp(command, "msg") == 0) {
         char *username;
         char *message;
-
         if (commandGetString(&username, in) != 0 ||
-            commandGetString(&message, in) != 0) {
+            commandGetString(&message, in) != 0 ||
+            commandHasNext(in)) {
           printf("Msg syntax: /msg <username> <message>\n");
           continue;
         }
@@ -298,9 +295,13 @@ int main(int argc, char**argv) {
         }
         messageUser(userReceiver, message);
       }
+      else if (strcmp(command, "show") == 0 && !commandHasNext(in)) {
+        flushMessageFrom(NULL, true);
+      }
       else if (strcmp(command, "show") == 0) {
         char *username;
-        if (commandGetString(&username, in) != 0) {
+        if (commandGetString(&username, in) != 0 ||
+            commandHasNext(in)) {
           printf("Show syntax: /show <username>\n");
           continue;
         }
@@ -310,8 +311,6 @@ int main(int argc, char**argv) {
         }
         flushMessageFrom(sender, true);
       }
-
-
       else if (strcmp(command, "logout") == 0) {
         if (commandHasNext(in)) {
           printf("Logout syntax: /logout\n");

@@ -13,6 +13,7 @@ struct thread_data {
   struct peer_node *p_node;
 };
 struct peer_node *addSender(char *username, struct peer_info *peer_in);
+pthread_t tid;
 
 int messageUser(struct peer_node *receiver, char* message);
 int openServer(char *port);

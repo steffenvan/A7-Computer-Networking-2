@@ -7,7 +7,6 @@ void ignoreWhiteSpace(struct command_stream_info *streaminfo);
 bool isWhiteSpace(char c);
 void deallocateObjects(struct command_stream_info *streaminfo);
 
-
 struct command_stream_info {
   rio_t rp;
   int allocatedCount;
@@ -53,7 +52,6 @@ int commandGetIndicator(bool *out, struct command_stream_info *streaminfo) {
     return 0;
   }
 }
-
 
 int commandGetString(char **out, struct command_stream_info *streaminfo) {
   int count = 0;

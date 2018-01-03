@@ -114,7 +114,7 @@ void deleteSender(struct peer_node *sender) {
   flushMessageFrom(sender, false);
 
   if (sender == senders) {
-    senders -> next = sender;
+    senders = sender -> next;
   }
 
   if (sender -> prev != NULL) {
@@ -137,12 +137,30 @@ int openServer(char *port) {
   return 0;
 }
 
+#define MAX_THREADS 64
+pthread_t messageThreads[MAX_THREADS];
+int threadCount = 0;
+pthread_mutex_t threadlist_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+
+int server_fd;
+
+void destroyThreads(void *vargp) {
+  (void) vargp;
+  assert(pthread_mutex_lock(&threadlist_mutex) == 0);
+  for (int i = threadCount-1; i >= 0; i--) {
+    pthread_cancel(messageThreads[i]);
+  }
+  assert(pthread_mutex_unlock(&threadlist_mutex) == 0);
+  close(server_fd);
+}
+
 void *receiverThread (void *vargp) {
   char *port = (char*) vargp;
-  int server_fd = Open_listenfd(port);
+  server_fd = Open_listenfd(port);
 
   Pthread_detach(pthread_self());
 
+  pthread_cleanup_push(destroyThreads, NULL);
   while(1) {
     struct thread_data *thread = malloc(sizeof(thread));
     struct peer_info *peer = malloc(sizeof(*peer));
@@ -151,12 +169,30 @@ void *receiverThread (void *vargp) {
     peer -> addr_len = sizeof(peer -> sock_addr);
     peer -> socket_fd = Accept(server_fd, &(peer -> sock_addr), &(peer -> addr_len));
     printf("Received a connection, start typing\n");
-    Pthread_create(&tid, NULL, messageReceiverThread, thread);
+    pthread_t receiver_tid;
+    Pthread_create(&receiver_tid, NULL, messageReceiverThread, thread);
   }
+  pthread_cleanup_pop(1);
 }
 
 void cleanReceiverThread(void *ptr) {
-
+  assert(pthread_mutex_lock(&threadlist_mutex) == 0);
+  int myIx = -1;
+  for (int i = 0; i < threadCount; i++) {
+    if (messageThreads[i] == pthread_self()) {
+      myIx = i;
+      break;
+    }
+  }
+  if (myIx == -1) {
+    printf("ERROR!!!\n");
+    exit(-1);
+  }
+  for (int i = myIx + 1; i < threadCount; i++) {
+    messageThreads[i - 1] = messageThreads[i];
+  }
+  threadCount--;
+  assert(pthread_mutex_unlock(&threadlist_mutex) == 0);
   struct clean_up_info *clean_in = (struct clean_up_info*)ptr;
   if (clean_in -> user != NULL) {
     deleteSender(clean_in -> user);
@@ -173,6 +209,10 @@ void makeKey () {
 
 void *messageReceiverThread (void *vargp) {
 
+  assert(pthread_mutex_lock(&threadlist_mutex) == 0);
+  messageThreads[threadCount] = pthread_self();
+  threadCount++;
+  assert(pthread_mutex_unlock(&threadlist_mutex) == 0);
   struct thread_data *init = (struct thread_data*)vargp;
   struct peer_info *sender = init -> p_info;
   struct peer_node *user = init -> p_node;

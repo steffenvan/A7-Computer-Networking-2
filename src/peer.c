@@ -26,6 +26,7 @@ int logoutUser() {
     printf("Not logged in. Use /login to log in.\n");
     return -1;
   }
+  pthread_cancel(tid);
   // no error handling, because if the response to errors would simply be to close the connection,
   // which is what we're currently doing
   char *buffer = "exit\n";
@@ -204,6 +205,10 @@ struct peer_node *getUser(char *username) {
 
 struct peer_node *connectToUser(char *username) {
   struct user_record user = findUser(username);
+  if (user.username == NULL) {
+    printf("Could not find user %s\n", username);
+    return NULL;
+  }
   int userfd = Open_clientfd(user.address, user.port);
 
   char *buffer = "connect ";
@@ -302,6 +307,7 @@ int main(int argc, char**argv) {
         struct peer_node *userReceiver = getUser(username);
         if (userReceiver == NULL) {
           printf("Received malformed user\n");
+          continue;
         }
         messageUser(userReceiver, message);
       }
@@ -331,7 +337,7 @@ int main(int argc, char**argv) {
       else if (strcmp(command, "exit") == 0) {
         if (commandHasNext(in)) {
           printf("Exit syntax: /exit\n");
-          continue;
+           continue;
         }
         printf("Have a good day\n");
         break;

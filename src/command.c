@@ -32,7 +32,6 @@ int getCommand(struct command_stream_info *streaminfo) {
   if (rio_readlineb(&(streaminfo -> rp), streaminfo -> currentCommand, RIO_BUFSIZE) <= 0) {
     return -1;
   }
-  printf("Input is: %s\n", streaminfo -> currentCommand);
 
   // Resetting the struct command_stream_info
   streaminfo -> commandChar = 0;

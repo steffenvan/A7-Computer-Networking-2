@@ -213,13 +213,23 @@ struct peer_node *connectToUser(char *username) {
 
   struct peer_info *sender = malloc(sizeof(*sender));
   sender -> socket_fd = userfd;
+  username = strdup(username);
   struct peer_node *peer = addSender(username, sender);
 
   if (peer == NULL) {
+    Free(username);
     // Peer should not be NULL, because getUser will only return NULL, if a
     // connection is already established.
     printf("Connection to peer failed\n");
+    return NULL;
   }
+
+  struct thread_data *data = malloc(sizeof(*data));
+  data -> p_info = sender;
+  data -> p_node = peer;
+
+  pthread_t tid;
+  Pthread_create(&tid, NULL, messageReceiverThread, data);
 
   return peer;
 }

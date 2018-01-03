@@ -19,11 +19,6 @@ struct peer_node {
   struct peer_node *prev;
 };
 
-struct thread_data {
-  struct peer_info *p_info;
-  struct peer_node *p_node;
-};
-
 struct peer_info;
 
 pthread_mutex_t senderlist_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;

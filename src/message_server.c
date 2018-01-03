@@ -26,7 +26,9 @@ struct thread_data {
 
 struct peer_info;
 
+pthread_mutex_t senderlist_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 struct peer_node *senders = NULL;
+
 struct peer_node *addSender(char *username, struct peer_info *peer_in) {
   if (lookupUser(username) != NULL) {
     return NULL;

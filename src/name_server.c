@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <assert.h>
 #include "name_server.h"
 #include "command.h"
 #include "csapp.h"
@@ -18,18 +19,6 @@ struct client_info {
   socklen_t addr_len;
 };
 
-struct user_node {
-  char *username;
-  char *address;
-  char *port;
-  struct client_info *client;
-  struct user_node *next;
-  struct user_node *previous;
-};
-
-struct user_node *users = NULL;
-size_t users_count = 0;
-
 bool rio_writei(int fd, int val) {
   char *digits = "0123456789";
   size_t part = val/10;
@@ -42,8 +31,23 @@ bool rio_writei(int fd, int val) {
   return !ok;
 }
 
+struct user_node {
+  char *username;
+  char *address;
+  char *port;
+  struct client_info *client;
+  struct user_node *next;
+  struct user_node *previous;
+};
+
+struct user_node *users = NULL;
+size_t users_count = 0;
+pthread_mutex_t userlist_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+
 struct user_node *createUser(char *username, struct client_info *client, char *address, char *port) {
+  assert(pthread_mutex_lock(&userlist_mutex) == 0);
   if (findUser(username) != NULL) {
+    assert(pthread_mutex_unlock(&userlist_mutex) == 0);
     return NULL;
   }
   struct user_node *result = malloc(sizeof(*result));
@@ -58,27 +62,27 @@ struct user_node *createUser(char *username, struct client_info *client, char *a
   }
   users = result;
   users_count++;
-
+  assert(pthread_mutex_unlock(&userlist_mutex) == 0);
   return result;
 }
 
 struct user_node *findUser(char *username) {
-  printf("username is: %s\n", username);
+  assert(pthread_mutex_lock(&userlist_mutex) == 0);
   for (struct user_node *user = users; user != NULL; user = user -> next) {
     if (strcmp((user -> username), username) == 0) {
-      printf("A\n");
+      assert(pthread_mutex_unlock(&userlist_mutex) == 0);
       return user;
     }
   }
+  assert(pthread_mutex_unlock(&userlist_mutex) == 0);
   return NULL;
 }
 
 void deleteUser(struct user_node *user) {
-
+  assert(pthread_mutex_lock(&userlist_mutex) == 0);
   if (user == users) {
     users = user -> next;
   }
-
   if (user -> previous != NULL) {
     user -> previous -> next = user -> next;
   }
@@ -88,6 +92,7 @@ void deleteUser(struct user_node *user) {
   users_count--;
   Free(user -> username);
   Free(user);
+  assert(pthread_mutex_unlock(&userlist_mutex) == 0);
 }
 
 void *thread (void *vargp);
@@ -114,9 +119,7 @@ int main(int argc, char**argv) {
 }
 
 bool sendUser(int fd, struct user_node *user) {
-
   bool writefailed = false;
-
   char *buffer = "user ";
   writefailed |= rio_writen(fd, buffer, strlen(buffer)) < 0;
   writefailed |= rio_writen(fd, user -> username, strlen(user -> username)) < 0;
@@ -128,7 +131,6 @@ bool sendUser(int fd, struct user_node *user) {
   printf("%s\n", user -> username);
   Fputs(writefailed ? "true\n" : "false\n", stdout);
   return writefailed;
-
 }
 
 void cleanThread(struct client_info *client, struct command_stream_info *in) {
@@ -184,6 +186,7 @@ void *thread(void *vargp) {
       }
       bool writefailed = false;
       if (strcmp(command, "list") == 0) {
+        assert(pthread_mutex_lock(&userlist_mutex) == 0);
         char *buffer = "online ";
         writefailed |= rio_writen(client -> socket_fd, buffer, strlen(buffer)) < 0;
         writefailed |= rio_writei(client -> socket_fd, users_count);
@@ -192,6 +195,7 @@ void *thread(void *vargp) {
           writefailed |= sendUser(client -> socket_fd, user);
         }
         buffer = "end\n";
+        assert(pthread_mutex_unlock(&userlist_mutex) == 0);
         writefailed |= rio_writen(client -> socket_fd, buffer, strlen(buffer)) < 0;
       }
       else if(strcmp(command, "find") == 0) {
@@ -200,6 +204,7 @@ void *thread(void *vargp) {
           printf("Malformed input\n");
           break;
         }
+        assert(pthread_mutex_lock(&userlist_mutex) == 0);
         struct user_node *user = findUser(username);
         if (user == NULL) {
           char *buffer = "no_user_found\n";
@@ -208,6 +213,7 @@ void *thread(void *vargp) {
         else {
           writefailed |= sendUser(client -> socket_fd, user);
         }
+        assert(pthread_mutex_unlock(&userlist_mutex) == 0);
       }
       else if(strcmp(command, "exit") == 0) {
         break;

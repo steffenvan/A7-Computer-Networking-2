@@ -1,5 +1,6 @@
 #include "command.h"
 #include "message_server.h"
+#include <assert.h>
 #include <pthread.h>
 
 pthread_t tid;
@@ -25,7 +26,9 @@ pthread_mutex_t senderlist_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 struct peer_node *senders = NULL;
 
 struct peer_node *addSender(char *username, struct peer_info *peer_in) {
+  assert(pthread_mutex_lock(&senderlist_mutex) == 0);
   if (lookupUser(username) != NULL) {
+    assert(pthread_mutex_unlock(&senderlist_mutex) == 0);
     return NULL;
   }
   struct peer_node *sender = malloc(sizeof(*sender));
@@ -37,15 +40,19 @@ struct peer_node *addSender(char *username, struct peer_info *peer_in) {
     senders -> prev = sender;
   }
   senders = sender;
+  assert(pthread_mutex_unlock(&senderlist_mutex) == 0);
   return sender;
 }
 
 struct peer_node *lookupUser(char *username) {
+  assert(pthread_mutex_lock(&senderlist_mutex) == 0);
   for (struct peer_node *sender = senders; sender != NULL; sender = sender -> next) {
     if (strcmp(sender -> username, username) == 0) {
+      assert(pthread_mutex_unlock(&senderlist_mutex) == 0);
       return sender;
     }
   }
+  assert(pthread_mutex_unlock(&senderlist_mutex) == 0);
   return NULL;
 }
 
@@ -54,10 +61,13 @@ struct message {
   struct peer_node *sender;
 };
 
-struct message messages[1024];
+#define MAX_MESSAGE_COUNT 1024
+struct message messages[MAX_MESSAGE_COUNT];
 int messageCount = 0;
+pthread_mutex_t messagelist_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 int flushMessageFrom(struct peer_node *sender, bool show) {
+  assert(pthread_mutex_lock(&messagelist_mutex) == 0);
   int j = 0;
   for (int i = 0; i < messageCount; i++) {
     if (sender == NULL || messages[i].sender == sender) {
@@ -72,27 +82,35 @@ int flushMessageFrom(struct peer_node *sender, bool show) {
     }
   }
   messageCount = j;
+  assert(pthread_mutex_unlock(&messagelist_mutex) == 0);
   return 0;
 } 
 
 int storeMessage(struct peer_node *sender, char *message) {
+  assert(pthread_mutex_lock(&messagelist_mutex) == 0);
+  if (messageCount >= MAX_MESSAGE_COUNT) {
+    printf("Error: message buffer full, cannot receive messages\n");
+    return -1;
+  }
   messages[messageCount].message = message;
   messages[messageCount].sender = sender;
   messageCount++;
+  assert(pthread_mutex_unlock(&messagelist_mutex) == 0);
   return 0;
 }
 
 int messageUser(struct peer_node *receiver, char *message) {
-
+  assert(pthread_mutex_lock(&senderlist_mutex) == 0);
   char *buffer = "say ";
   rio_writen(receiver -> peer -> socket_fd, buffer, strlen(buffer));
   rio_writen(receiver -> peer -> socket_fd, message, strlen(message));
   rio_writen(receiver -> peer -> socket_fd, "\n", 1);
+  assert(pthread_mutex_unlock(&senderlist_mutex) == 0);
   return 0;
 }
 
 void deleteSender(struct peer_node *sender) {
-
+  assert(pthread_mutex_lock(&senderlist_mutex) == 0);
   flushMessageFrom(sender, false);
 
   if (sender == senders) {
@@ -108,6 +126,7 @@ void deleteSender(struct peer_node *sender) {
   }
   Free(sender -> username);
   Free(sender);
+  assert(pthread_mutex_unlock(&senderlist_mutex) == 0);
 }
 
 void *receiverThread (void *vargp);

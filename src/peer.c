@@ -299,8 +299,7 @@ int main(int argc, char**argv) {
         char *username;
         char *message;
         if (commandGetString(&username, in) != 0 ||
-            commandGetString(&message, in) != 0 ||
-            commandHasNext(in)) {
+            commandGetLine(&message, in) != 0) {
           printf("Msg syntax: /msg <username> <message>\n");
           continue;
         }

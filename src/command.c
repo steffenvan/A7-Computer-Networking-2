@@ -5,6 +5,7 @@
 
 void ignoreWhiteSpace(struct command_stream_info *streaminfo);
 bool isWhiteSpace(char c);
+bool isNewline(char c);
 void deallocateObjects(struct command_stream_info *streaminfo);
 
 struct command_stream_info {
@@ -53,9 +54,9 @@ int commandGetIndicator(bool *out, struct command_stream_info *streaminfo) {
   }
 }
 
-int commandGetString(char **out, struct command_stream_info *streaminfo) {
+int commandGetUntil(char **out, struct command_stream_info *streaminfo, bool (*predicate)(char)) {
   int count = 0;
-  while (!isWhiteSpace(streaminfo -> currentCommand[streaminfo -> commandChar + count]) && streaminfo -> currentCommand[streaminfo -> commandChar + count] != '\0') {
+  while (!predicate(streaminfo -> currentCommand[streaminfo -> commandChar + count]) && streaminfo -> currentCommand[streaminfo -> commandChar + count] != '\0') {
     count++;
   }
   if (count == 0) {
@@ -71,6 +72,12 @@ int commandGetString(char **out, struct command_stream_info *streaminfo) {
   streaminfo -> allocatedCount++;
   ignoreWhiteSpace(streaminfo);
   return 0;
+}
+int commandGetString(char **out, struct command_stream_info *streaminfo) {
+  return commandGetUntil(out, streaminfo, isWhiteSpace);
+}
+int commandGetLine(char **out, struct command_stream_info *streaminfo) {
+  return commandGetUntil(out, streaminfo, isNewline);
 }
 
 int commandGetInt(int *out, struct command_stream_info *streaminfo) {
@@ -109,6 +116,9 @@ bool commandHasNext (struct command_stream_info *streaminfo) {
 
 bool isWhiteSpace(char c) {
   return c == ' ' || c == '\n' || c == '\r'||c == '\t';
+}
+bool isNewline(char c) {
+  return c == '\n' || c == '\r';
 }
 
 void ignoreWhiteSpace(struct command_stream_info *streaminfo) {

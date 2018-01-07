@@ -266,7 +266,7 @@ void *messageReceiverThread (void *vargp) {
       printf("Received malformed command (%s)\n", command);
     }
     char *message;
-    if (commandGetString(&message, sender_info) != 0) {
+    if (commandGetLine(&message, sender_info) != 0) {
       printf("Received malformed input (%s)\n", message);
     }
     // Using strdup because getcommand deallocates all objects

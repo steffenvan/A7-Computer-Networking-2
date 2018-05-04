@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS =-Wall -Wextra -pedantic -std=gnu11 -D_GNU_SOURCE
-LD_FLAGS = -lpthread
+LD_FLAGS = -pthread
 
 all : command peer name_server message_server
 
